@@ -1,30 +1,45 @@
-name: Node Backend CI
+name: CI CD Pipeline
 
 on:
   push:
-    branches: ["*"]
-  pull_request:
-    branches: ["*"]
+    branches: ["main"]
 
 jobs:
-  test-and-build:
+  build-test-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      - name: Install dependencies
+      - name: Install deps
         run: npm install
 
       - name: Run tests
         run: npm test
 
       - name: Build Docker image
-        if: github.ref == 'refs/heads/main'
         run: docker build -t retail-backend .
+
+      # -----------------------
+      # DEPLOY TO EC2
+      # -----------------------
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            cd retail-backend || git clone https://github.com/tanyasomwanshi/retail-backend.git
+            cd retail-backend
+            git pull
+            docker stop retail || true
+            docker rm retail || true
+            docker build -t retail-backend .
+            docker run -d -p 5000:5000 --name retail retail-backend
